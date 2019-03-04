@@ -1,8 +1,8 @@
 
-
 DEFAULT_CONFIGS = {
     'VERSION': 'v1',
-    'DOMAIN_NAME': 'http://obs.casearth.cn/',
+    'SCHEME': 'http',
+    'DOMAIN_NAME': 'obs.casearth.cn',
     'OBJ_API_PREFIX': 'obj',
     'DIR_API_PREFIX': 'dir',
     'BUCKET_API_PREFIX': 'buckets',
@@ -22,7 +22,7 @@ def join_url_with_slash(s, *args):
     :param args: 其他url部分
     :return:
     '''
-    li = [item.strip('/') for item in args ]
+    li = [item.strip('/') for item in args if item]
     s = s.rstrip('/')
     li.insert(0, s)
     return '/'.join(li)
@@ -32,9 +32,10 @@ def _prepare_settings(settings):
         if key not in settings:
             settings[key] = value
 
+    scheme = settings['SCHEME']
     domain_name = settings['DOMAIN_NAME']
     api_version = settings['VERSION']
-    api_version_url = join_url_with_slash(domain_name, 'api', api_version)
+    api_version_url = join_url_with_slash(scheme + '://' + domain_name, 'api', api_version)
     settings['API_VERSION_URL'] = api_version_url
 
     # 对象API基url

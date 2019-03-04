@@ -1,13 +1,15 @@
 from requests import sessions, PreparedRequest
-from . import auth_key
 from requests.exceptions import ConnectionError
+from urllib.parse import unquote
 
+from . import auth_key
 from .config import configs
+
 
 class Auth(object):
     def __init__(self, access_key=None, secret_key=None):
-        self._access_key = access_key or configs.ACCESS_KEY
-        self._secret_key = secret_key or configs.SECRET_KEY
+        self.access_key = access_key or configs.ACCESS_KEY
+        self.secret_key = secret_key or configs.SECRET_KEY
 
     def __str__(self):
         return f'<Auth>(access_key={self.access_key}, secret_key={self.secret_key})'
@@ -20,8 +22,8 @@ class Auth(object):
     def access_key(self, value):
         if value and isinstance(value, str):
             self._access_key = value
-
-        raise ValueError('access_key must be string.')
+        else:
+            raise ValueError('access_key must be string.')
 
     @property
     def secret_key(self):
@@ -31,13 +33,14 @@ class Auth(object):
     def secret_key(self, value):
         if value and isinstance(value, str):
             self._secret_key = value
-
-        raise ValueError('access_key must be string.')
+        else:
+            raise ValueError('access_key must be string.')
                 
     def get_url_path(self, url, params):
         pr = PreparedRequest()
         pr.prepare_url(url=url, params=params)
-        return pr.path_url
+        url_path = unquote(pr.path_url) # 解码url
+        return url_path
 
     def get_auth_header_value(self, method, url, params, *args, **kwargs):
         path_url = self.get_url_path(url=url, params=params)

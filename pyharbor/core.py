@@ -220,7 +220,82 @@ def download_obj(obj_url, filename, start=0):
                 return  (True, offset, 'download ok')
 
 
-def create_dir(dir_url):
+def delete_obj(obj_url):
+    '''
+    删除一个对象
+
+    :param obj_url: 对象url
+    :return:
+        (ok, code, msg)
+        ok: True or False, 指示请求是否成功
+        code: 请求返回的状态码
+        msg: 请求结果描述字符串
+    '''
+    try:
+        r = request.delete(url=obj_url)
+    except Exception as e:
+        return (False, None, str(e))
+
+    if r.status_code == 204:
+        return (True, 204, 'delete successful')
+
+    msg = get_response_msg(r)
+    return (False, r.status_code, msg)
+
+
+def get_obj_info(obj_url):
+    '''
+    获取一个对象的元数据
+
+    :param obj_url: 对象url
+    :return:
+        (data, code, msg)
+        data: 指示请求成功时字典类型的数据，失败时为None
+        code: 请求返回的状态码或None
+        msg: 结果描述字符串
+    '''
+    try:
+        r = request.get(url=obj_url, params={'info': True})
+    except Exception as e:
+        return (None, None, str(e))
+
+    if r.status_code == 200:
+        try:
+            data = r.json()
+        except ValueError as e:
+            return (None, None, '获取无效的json数据：' + str(e))
+
+        return (data, 200, "Get object's metedata successful.")
+
+    msg = get_response_msg(r)
+    return (False, r.status_code, msg)
+
+def share_obj(obj_url, share=True, days=0):
+    '''
+    设置对象私有或公有访问权限
+
+    :param obj_url: 对象url
+    :param share: 是否分享，用于设置对象公有或私有, true(公有)，false(私有)
+    :param days: 对象公开分享天数(share=true时有效)，0表示永久公开，负数表示不公开，默认为0
+    :return:
+        (ok, code, msg)
+        ok: True or False, 指示请求是否成功
+        code: 请求返回的状态码
+        msg: 请求结果描述字符串
+    '''
+    try:
+        r = request.patch(url=obj_url, params={'share': share, 'days': days})
+    except Exception as e:
+        return (False, None, str(e))
+
+    if r.status_code == 200:
+        return (True, 200, 'Set object permission successful.')
+
+    msg = get_response_msg(r)
+    return (False, r.status_code, msg)
+
+
+def create_dir_by_url(dir_url):
     '''
     创建一个目录
 
@@ -246,27 +321,30 @@ def create_dir(dir_url):
 
     return (False, r.status_code, msg)
 
-def create_one_dir(bucket_name, dir_path='', dir_name=''):
+def create_dir(bucket_name, base_dir='', dir_name=''):
     '''
     创建一个目录
 
     :param bucket_name: 桶名
-    :param dir_path: 父目录路径
+    :param base_dir: 父目录路径
     :param dir_name:  目录名
     :return: (ok, code, msg)
         ok: True or False, 指示请求是否成功
         code: 请求返回的状态码
         msg: 请求结果描述字符串
     '''
+    if '/' in dir_name:
+        return (False, None, '目录名不能包含“/”')
+
     api_dir_base = configs.DIR_API_URL_BASE
-    if dir_path:
-        bucket_dir_name = join_url_with_slash(bucket_name, dir_path, dir_name)
+    if base_dir:
+        bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
     else:
         bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
 
     dir_url = join_url_with_slash(api_dir_base, bucket_dir_name) + '/'
 
-    return create_dir(dir_url)
+    return create_dir_by_url(dir_url)
 
 
 def get_path_breadcrumb(path=None, base_dir=''):
@@ -289,7 +367,7 @@ def get_path_breadcrumb(path=None, base_dir=''):
             breadcrumb.append([key, '/'.join(base + dirs[0:i])])
         return breadcrumb
 
-def create_path(bucket_name=None, dir_path='', base_dir=''):
+def create_path(bucket_name=None, base_dir='', dir_path=''):
     '''
     创建目录路径
     :param bucket_name: 目录所在的存储桶名称
@@ -307,95 +385,100 @@ def create_path(bucket_name=None, dir_path='', base_dir=''):
 
     # 尝试从头创建整个路径
     for dir_name, p_dir_path in dirs:
-        ok, *_ = create_one_dir(bucket_name=bucket_name, dir_path=p_dir_path, dir_name=dir_name)
+        ok, *_ = create_dir(bucket_name=bucket_name, base_dir=p_dir_path, dir_name=dir_name)
         if not ok:
             # 再次尝试
-            ok, *_ = create_one_dir(bucket_name=bucket_name, dir_path=p_dir_path, dir_name=dir_name)
+            ok, *_ = create_dir(bucket_name=bucket_name, base_dir=p_dir_path, dir_name=dir_name)
             if not ok:
                 return False
 
     return True
 
+def get_objs_and_subdirs_by_url(dir_url, limit=None, offset=None):
+    '''
+    获取目录下的对象和子目录
 
-# class Directory():
-#     def __init__(self, bucket_name=None, dir_api_base_url=None):
-#         '''
-#         :param bucket_name: 目录操作对应的存储桶名称
-#         :param dir_api_base_url: 目录API的基url
-#         '''
-#         self._bucket_name = bucket_name or EVHARBOR_STORAGE_BUCKET_NAME
-#         self._dir_api_base = dir_api_base_url or API_V1_DIR_BASE_URL
-#
-#     def create(self, dir_name, bucket_name=None, dir_path=''):
-#         '''
-#         创建一个目录
-#         :param bucket_name: 目录所在的存储桶名称
-#         :param dir_path: 目录的父目录节点路径
-#         :param dir_name: 要创建的目录
-#         :return:
-#             success: (True, code, msg)
-#             failure: (False, code, msg)
-#         '''
-#         bucket_name = bucket_name or self._bucket_name
-#
-#         p = [bucket_name, dir_path, dir_name]
-#         if dir_path == '':
-#             p.pop(1)
-#         dir_path_name = '/'.join(p) + '/'
-#         dir_path_name = quote(dir_path_name)
-#         dir_url = urljoin(API_V1_DIR_BASE_URL, dir_path_name)
-#
-#         return create_dir(dirurl)
-#
-#
-#     def get_objs(self, response_json):
-#         objs_and_subdirs = response_json.get('files', [])
-#
-#         if not isinstance(objs_and_subdirs, list):
-#             return None
-#         return [o for o in objs_and_subdirs if o.get('fod')]
-#
-#     def get_objs_path_list(self, response_json):
-#         objs_and_subdirs = response_json.get('files', [])
-#         path = response_json.get('dir_path')
-#
-#         if not isinstance(objs_and_subdirs, list):
-#             return None
-#
-#         return [(o.get('name'), '/'.join([path, o.get('name')]).lstrip('/')) for o in objs_and_subdirs if o.get('fod')]
-#
-#     def get_objs_and_subdirs(self, bucket_name=None, dir_path='', params={}):
-#         '''
-#         获取目录下的对象和子目录
-#         :param bucket_name: 存储桶名称
-#         :param dir_path: 目录路径
-#         :param params: url query参数
-#         :return:
-#         '''
-#         dir_path_name = bucket_name or self._bucket_name
-#         if dir_path:
-#             dir_path_name += '/' + dir_path
-#
-#         dir_path_name = quote(dir_path_name) + '/'
-#
-#         query = urlencode(query=params)
-#         if query:
-#             dir_path_name += '?' + query
-#
-#         dir_url = urljoin(API_V1_DIR_BASE_URL, dir_path_name)
-#         return self.get_objs_and_subdirs_by_url(dir_url)
-#
-#     def get_objs_and_subdirs_by_url(self, dir_url):
-#         '''
-#         获取目录下的对象和子目录
-#         :param dir_url: 目录url
-#         :return:
-#         '''
-#         r = requests.get(dir_url, headers={'Authorization': 'Token ' + EVHARBOR_AUTH_TOKEN})
-#         if r.status_code == 200:
-#             return r.json()
-#
-#         return None
+    :param dir_url: 目录url
+    :param limit: 获取目标 数量限制
+    :param offset: 获取目标 起始偏移量
+    :return:
+        (data, code, msg)
+        data: 指示请求成功时字典类型的数据，失败时为None
+        code: 请求返回的状态码或None
+        msg: 结果描述字符串
+    '''
+    params = {}
+    if limit:
+        params['limit'] = limit
+
+    if offset:
+        params['offset'] = offset
+
+    try:
+        r = request.get(dir_url, params=params)
+    except Exception as e:
+        return (None, None, str(e))
+
+    if r.status_code == 200:
+        try:
+            data = r.json()
+        except ValueError as e:
+            return (None, None, '获取无效的json数据：' + str(e))
+
+        return (data, 200, "Get data successful.")
+
+    msg = get_response_msg(r)
+    return (False, r.status_code, msg)
+
+
+def delete_dir_by_url(dir_url):
+    '''
+    删除一个目录
+
+    :param dir_url: 目录url
+    :return: (ok, code, msg)
+        ok: True or False, 指示请求是否成功
+        code: 请求返回的状态码
+        msg: 请求结果描述字符串
+    '''
+    try:
+        r = request.delete(dir_url)
+    except request.ConnectionError as e:
+        return (False, 0, str(e))
+
+    msg = get_response_msg(r)
+    if r.status_code == 204:
+        return (True, 204, msg)
+
+    return (False, r.status_code, msg)
+
+
+def delete_dir(bucket_name, base_dir='', dir_name=''):
+    '''
+    创建一个目录
+
+    :param bucket_name: 桶名
+    :param base_dir: 父目录路径
+    :param dir_name:  目录名
+    :return: (ok, code, msg)
+        ok: True or False, 指示请求是否成功
+        code: 请求返回的状态码
+        msg: 请求结果描述字符串
+    '''
+    if '/' in dir_name:
+        return (False, None, '目录名不能包含“/”')
+
+    api_dir_base = configs.DIR_API_URL_BASE
+    if base_dir:
+        bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
+    else:
+        bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
+
+    dir_url = join_url_with_slash(api_dir_base, bucket_dir_name) + '/'
+
+    return delete_dir_by_url(dir_url)
+
+
 
 
 
