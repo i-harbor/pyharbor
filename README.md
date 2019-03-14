@@ -1,10 +1,10 @@
 ## 全局配置 
 首先使用前要先进行配置，包括访问密钥（access_key和secret_key）,域名等   
 ```python
-from pyharbor import set_global_auth_key, set_global_settings
+import pyharbor
 
-set_global_settings({
-    'SCHEME': 'http',   # 或'https', 默认'http'
+pyharbor.set_global_settings({
+    'SCHEME': 'http',   # 或'https', 默认'https'
     'DOMAIN_NAME': '10.0.86.213:8000', # 默认 'obs.casearth.cn'
     'ACCESS_KEY': '4203ecc034d411e9b31bc800a000655d',
     'SECRET_KEY': '93c74b39396abd09cb0720a1af52c5c27690a2b8',
@@ -88,3 +88,63 @@ if data:
 else:
     print('获取对象元数据失败：' + msg)
 ```
+
+#### 下载一个对象
+```python
+import pyharbor
+
+client = pyharbor.get_client()
+# ok, offset, msg = client.bucket('www').dir('testdir').download_object(obj_name='examples.py', filename='./download')
+# 或者
+ok, offset, msg = client.download_object(bucket_name='www', obj_name='testdir/examples.py', filename='./download')
+if ok:
+    print('下载对象元数据成功：' + msg)
+else:
+    print('获取对象元数据失败：' + msg)
+```
+
+#### 设置对象访问权限为公有权限，时限7天
+```python
+import pyharbor
+
+client = pyharbor.get_client()
+# ok, msg = client.bucket('www').dir('testdir').share_object(obj_name='examples.py', share=True, days=7)
+# 或者
+ok, msg = client.share_object(bucket_name='www', obj_name='testdir/examples.py', share=True, days=7)
+if ok:
+    print('设置成功：' + msg)
+else:
+    print('设置失败：' + msg)
+```
+
+#### 获取桶id和访问权限
+```python
+import pyharbor
+
+client = pyharbor.get_client()
+
+# 获取桶id
+bucket_name = 'www'
+bucket = client.bucket(bucket_name)
+print(f'bucket({bucket_name}) id = {bucket.id}')
+
+# 设置桶为公有访问权限
+ok, msg = bucket.set_permission(public=True)
+if ok:
+    print('桶公有权限设置成功')
+else:
+    print('桶公有权限设置失败')
+
+# 设置桶为私有访问权限
+ok, msg = client.bucket_permission(bucket_name=bucket_name, public=False)
+if ok:
+    print('桶私有权限设置成功')
+else:
+    print('桶私有权限设置失败')
+
+```
+
+
+
+
+

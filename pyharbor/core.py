@@ -50,436 +50,612 @@ def get_response_msg(response, key='code_text'):
     '''
     try:
         data = response.json()
+    except ValueError:
+        return response.text
+
+    if response.ok:
         if key in data:
             msg = data[key]
         elif 'code_text' in data:
             msg = data['code_text']
-        elif 'detail' in data:
-            msg = data['detail']
         else:
-            msg = response.text
-    except ValueError:
+            msg = 'successfull'
+
+    elif 'detail' in data:
+        msg = data['detail']
+    else:
         msg = response.text
 
     return msg if msg else ''
 
-
-def upload_one_chunk(obj_url, offset, chunk, **kwargs):
-    '''
-    上传一个分片
-
-    :param obj_url: 对象url
-    :param offset: 分片偏移量
-    :param chunk: 分片
-    :return:
-        success: (True, code, msg)
-        failure: (False, code, msg)
-        可能参数有误，目录路径不存在等各种原因不具备上传条件: (None, 0, msg)
-    '''
-    try:
-        r = request.put(obj_url, files={'chunk': chunk},
-            data={"chunk_offset": offset, "chunk_size": len(chunk)}, **kwargs)
-    except request.ConnectionError as e:
-        return (False, 0, str(e))
-
-    msg = get_response_msg(r)
-
-    if r.status_code == 200:
-        return (True, 200, msg)
-    elif r.status_code == 404: # 可能目录路径不存在
-        return (None, 404, msg)
-    elif 400 <= r.status_code < 500:
-        return (None, r.status_code, msg)
-
-    return False, r.status_code, msg
-
-
-def upload_file(obj_url, filename, start=0):
-    '''
-    上传一个文件
-
-    :param obj_url: 对象url
-    :param filename: 要上传文件的绝对路径
-    :param start: 开始上传的偏移量
-    :return:
-        (ok, offset, msg)
-        ok: True or False, 指示上传是否成功
-        offset: 已上传文件的偏移量
-        msg: 上传结果描述字符串
-
-    '''
-    if not os.path.exists(filename):
-        raise FileNotFoundError() 
-
-    offset = start
-    with open(filename, 'rb') as f:
-        size = get_size(f)
-        for chunk in chunks(f, offset=start):
-            if not chunk:
-                if offset >= size:
-                    break
-                continue
-                  
-            ok, code, msg = upload_one_chunk(obj_url=obj_url, offset=offset, chunk=chunk)
-            if not ok:
-                return False, offset, 'upload failed:' + msg
-
-            offset += len(chunk)
-
-        return True, offset, 'upload successfull'
-
-
-def download_one_chunk(obj_url, offset, size):
-    '''
-    下载一个分片
-
-    :param obj_url: 对象url
-    :param offset: 分片偏移量
-    :param size: 要下载的分片大小
-    :return:
-        success: (True, {'chunk': chunk, 'obj_size': xx})
-        failure: (False, msg)
-        404: (None, msg)
-    '''
-    try:
-        r = request.get(obj_url, params={'offset': offset, 'size': size})
-    except Exception as e:
-        return (False, str(e))
-
-    if r.status_code == 200:
-        chunk = r.content
-        chunk_size = int(r.headers.get('evob_chunk_size', None))
-        obj_size = int(r.headers.get('evob_obj_size', 0))
-
-        if chunk_size is not None and chunk_size != len(chunk):
-            return (False, '读取的数据和服务器返回的数据大小不一致')
-
-        return (True, {'chunk': chunk, 'obj_size': obj_size})
-
-    msg = get_response_msg(r)
-    if r.status_code in [400, 404]:
-        return (None, msg)
-
-    return (False, msg)
-
-def _download_chunk(obj_url, offset, size):
-    '''
-    下载一个分片，失败重试一次
-
-    :param obj_url: 对象url
-    :param offset: 分片偏移量
-    :param size: 要下载的分片大小
-    :return:
-        success: (True, {'chunk': chunk, 'obj_size': xx})
-        failure: (False, msg)
-        404: (None, msg)
-    '''
-    ok, result = download_one_chunk(obj_url=obj_url, offset=offset, size=size)
-    if ok is False:
-        ok, result = download_one_chunk(obj_url=obj_url, offset=offset, size=size)
-
-    return ok, result
-
-def download_obj(obj_url, filename, start=0):
-    '''
-    下载一个对象
-
-    :param obj_url: 对象url
-    :param filename: 对象保存的绝对路径文件名
-    :param start: 开始下载的偏移量
-    :return:
-        (ok, offset, msg)
-        ok: True or False, 指示下载是否成功
-        offset: 已下载对象的偏移量
-        msg: 操作结果描述字符串
-    '''
-    offset = start
-    chunk_size = 5*1024*1024
-
-    # 目录路径不存在存在则创建
-    dir_path = os.path.dirname(filename)
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path, exist_ok=True)
-
-    with open(filename, 'wb') as f:
-        while True:
-            ok, result = _download_chunk(obj_url=obj_url, offset=offset, size=chunk_size)
-            if ok is None: # 文件不存在
-                return (False, 0, result)
-            elif not ok:
-                return (False, offset, 'downloading interrupt')
-
-            chunk = result.get('chunk', None)
-            obj_size = result.get('obj_size', 0)
-
-            f.seek(offset)
-            f.write(chunk)
-
-            offset += len(chunk)
-            if offset >= obj_size: # 下载完成
-                return  (True, offset, 'download ok')
-
-
-def delete_obj(obj_url):
-    '''
-    删除一个对象
-
-    :param obj_url: 对象url
-    :return:
-        (ok, code, msg)
-        ok: True or False, 指示请求是否成功
-        code: 请求返回的状态码
-        msg: 请求结果描述字符串
-    '''
-    try:
-        r = request.delete(url=obj_url)
-    except Exception as e:
-        return (False, None, str(e))
-
-    if r.status_code == 204:
-        return (True, 204, 'delete successful')
-
-    msg = get_response_msg(r)
-    return (False, r.status_code, msg)
-
-
-def get_obj_info(obj_url):
-    '''
-    获取一个对象的元数据
-
-    :param obj_url: 对象url
-    :return:
-        (data, code, msg)
-        data: 指示请求成功时字典类型的数据，失败时为None
-        code: 请求返回的状态码或None
-        msg: 结果描述字符串
-    '''
-    try:
-        r = request.get(url=obj_url, params={'info': True})
-    except Exception as e:
-        return (None, None, str(e))
-
-    if r.status_code == 200:
-        try:
-            data = r.json()
-        except ValueError as e:
-            return (None, None, '获取无效的json数据：' + str(e))
-
-        return (data, 200, "Get object's metedata successful.")
-
-    msg = get_response_msg(r)
-    return (False, r.status_code, msg)
-
-def share_obj(obj_url, share=True, days=0):
-    '''
-    设置对象私有或公有访问权限
-
-    :param obj_url: 对象url
-    :param share: 是否分享，用于设置对象公有或私有, true(公有)，false(私有)
-    :param days: 对象公开分享天数(share=true时有效)，0表示永久公开，负数表示不公开，默认为0
-    :return:
-        (ok, code, msg)
-        ok: True or False, 指示请求是否成功
-        code: 请求返回的状态码
-        msg: 请求结果描述字符串
-    '''
-    try:
-        r = request.patch(url=obj_url, params={'share': share, 'days': days})
-    except Exception as e:
-        return (False, None, str(e))
-
-    if r.status_code == 200:
-        return (True, 200, 'Set object permission successful.')
-
-    msg = get_response_msg(r)
-    return (False, r.status_code, msg)
-
-
-def create_dir_by_url(dir_url):
-    '''
-    创建一个目录
-
-    :param dir_url: 目录url
-    :return: (ok, code, msg)
-        ok: True or False, 指示请求是否成功
-        code: 请求返回的状态码
-        msg: 请求结果描述字符串
-
-    '''
-    try:
-        r = request.post(dir_url)
-    except request.ConnectionError as e:
-        return (False, 0, str(e))
-
-    msg = get_response_msg(r)
-    if r.status_code == 201:
-        return (True, 201, msg)
-    elif r.status_code == 400:
-        data = r.json()
-        if data.get('existing', '') is True:
-            return (True, 400, msg)
-
-    return (False, r.status_code, msg)
-
-def create_dir(bucket_name, base_dir='', dir_name=''):
-    '''
-    创建一个目录
-
-    :param bucket_name: 桶名
-    :param base_dir: 父目录路径
-    :param dir_name:  目录名
-    :return: (ok, code, msg)
-        ok: True or False, 指示请求是否成功
-        code: 请求返回的状态码
-        msg: 请求结果描述字符串
-    '''
-    if '/' in dir_name:
-        return (False, None, '目录名不能包含“/”')
-
-    api_dir_base = configs.DIR_API_URL_BASE
-    if base_dir:
-        bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
-    else:
-        bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
-
-    dir_url = join_url_with_slash(api_dir_base, bucket_dir_name) + '/'
-
-    return create_dir_by_url(dir_url)
-
-
 def get_path_breadcrumb(path=None, base_dir=''):
-        '''
-        路径面包屑
-        :param base_dir: 基目录路径
-        :return: list([dir_name，parent_dir_path])
-        '''
-        breadcrumb = []
-        if not isinstance(path, str):
-            raise ValueError('path must be a string.')
-        _path = path
-        if _path == '':
-            return breadcrumb
-
-        base = [base_dir] if base_dir else []
-        _path = _path.strip('/')
-        dirs = _path.split('/')
-        for i, key in enumerate(dirs):
-            breadcrumb.append([key, '/'.join(base + dirs[0:i])])
+    '''
+    路径面包屑
+    :param base_dir: 基目录路径
+    :return: list([dir_name，parent_dir_path])
+    '''
+    breadcrumb = []
+    if not isinstance(path, str):
+        raise ValueError('path must be a string.')
+    _path = path
+    if _path == '':
         return breadcrumb
 
-def create_path(bucket_name=None, base_dir='', dir_path=''):
+    base = [base_dir] if base_dir else []
+    _path = _path.strip('/')
+    dirs = _path.split('/')
+    for i, key in enumerate(dirs):
+        breadcrumb.append([key, '/'.join(base + dirs[0:i])])
+    return breadcrumb
+
+
+class ApiCore():
     '''
-    创建目录路径
-    :param bucket_name: 目录所在的存储桶名称
-    :param base_dir: 要创建的路径dir_path的基路经
-    :param dir_path: 目录路径
-    :return:
-        success: True
-        failure: False
+    EVHarbor API 封装
     '''
-    if dir_path == '':
+    def __init__(self):
+        self._DIR_API_URL_BASE = configs.DIR_API_URL_BASE
+        self._OBJ_API_URL_BASE = configs.OBJ_API_URL_BASE
+        self._BUCKET_API_URL_BASE = configs.BUCKET_API_URL_BASE
+
+    def upload_one_chunk(self, obj_url, offset, chunk, **kwargs):
+        '''
+        上传一个分片
+
+        :param obj_url: 对象url
+        :param offset: 分片偏移量
+        :param chunk: 分片
+        :return:
+            success: (True, code, msg)
+            failure: (False, code, msg)
+            可能参数有误，目录路径不存在等各种原因不具备上传条件: (None, 0, msg)
+        '''
+        try:
+            r = request.put(obj_url, files={'chunk': chunk},
+                data={"chunk_offset": offset, "chunk_size": len(chunk)}, **kwargs)
+        except request.ConnectionError as e:
+            return (False, 0, str(e))
+
+        msg = get_response_msg(r)
+
+        if r.status_code == 200:
+            return (True, 200, msg)
+        elif r.status_code == 404: # 可能目录路径不存在
+            return (None, 404, msg)
+        elif 400 <= r.status_code < 500:
+            return (None, r.status_code, msg)
+
+        return False, r.status_code, msg
+
+    def upload_obj_by_url(self, obj_url, filename, start=0):
+        '''
+        上传一个文件
+
+        :param obj_url: 对象url
+        :param filename: 要上传文件的绝对路径
+        :param start: 开始上传的偏移量
+        :return:
+            (ok, offset, msg)
+            ok: True or False, 指示上传是否成功
+            offset: 已上传文件的偏移量
+            msg: 上传结果描述字符串
+
+        '''
+        if not os.path.exists(filename):
+            raise FileNotFoundError()
+
+        offset = start
+        with open(filename, 'rb') as f:
+            size = get_size(f)
+            for chunk in chunks(f, offset=start):
+                if not chunk:
+                    if offset >= size:
+                        break
+                    continue
+
+                ok, code, msg = self.upload_one_chunk(obj_url=obj_url, offset=offset, chunk=chunk)
+                if not ok:
+                    return False, offset, 'upload failed:' + msg
+
+                offset += len(chunk)
+
+            return True, offset, 'upload successfull'
+
+    def upload_obj(self, bucket_name, path, obj_name, filename, start=0):
+        '''
+        上传一个文件
+
+        :param bucket_name: 存储桶名称
+        :param path: 目录路径
+        :param obj_name: 对象名称
+        :param filename: 要上传文件的绝对路径
+        :param start: 开始上传的偏移量
+        :return:
+            (ok, offset, msg)
+            ok: True or False, 指示上传是否成功
+            offset: 已上传文件的偏移量
+            msg: 上传结果描述字符串
+        '''
+        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, path, obj_name) + '/'
+        return self.upload_obj_by_url(obj_url=obj_url, filename=filename, start=start)
+
+    def download_one_chunk(self, obj_url, offset, size):
+        '''
+        下载一个分片
+
+        :param obj_url: 对象url
+        :param offset: 分片偏移量
+        :param size: 要下载的分片大小
+        :return:
+            success: (True, {'chunk': chunk, 'obj_size': xx})
+            failure: (False, msg)
+            404: (None, msg)
+        '''
+        try:
+            r = request.get(obj_url, params={'offset': offset, 'size': size})
+        except Exception as e:
+            return (False, str(e))
+
+        if r.status_code == 200:
+            chunk = r.content
+            chunk_size = int(r.headers.get('evob_chunk_size', None))
+            obj_size = int(r.headers.get('evob_obj_size', 0))
+
+            if chunk_size is not None and chunk_size != len(chunk):
+                return (False, '读取的数据和服务器返回的数据大小不一致')
+
+            return (True, {'chunk': chunk, 'obj_size': obj_size})
+
+        msg = get_response_msg(r)
+        if r.status_code in [400, 404]:
+            return (None, msg)
+
+        return (False, msg)
+
+    def _download_chunk(self, obj_url, offset, size):
+        '''
+        下载一个分片，失败重试一次
+
+        :param obj_url: 对象url
+        :param offset: 分片偏移量
+        :param size: 要下载的分片大小
+        :return:
+            success: (True, {'chunk': chunk, 'obj_size': xx})
+            failure: (False, msg)
+            404: (None, msg)
+        '''
+        ok, result = self.download_one_chunk(obj_url=obj_url, offset=offset, size=size)
+        if ok is False:
+            ok, result = self.download_one_chunk(obj_url=obj_url, offset=offset, size=size)
+
+        return ok, result
+
+    def download_obj_by_url(self, obj_url, filename, start=0):
+        '''
+        下载一个对象
+
+        :param obj_url: 对象url
+        :param filename: 对象保存的绝对路径文件名
+        :param start: 开始下载的偏移量
+        :return:
+            (ok, offset, msg)
+            ok: True or False, 指示下载是否成功
+            offset: 已下载对象的偏移量
+            msg: 操作结果描述字符串
+        '''
+        offset = start
+        chunk_size = 5*1024*1024
+
+        # 目录路径不存在存在则创建
+        dir_path = os.path.dirname(filename)
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
+
+        with open(filename, 'wb') as f:
+            while True:
+                ok, result = self._download_chunk(obj_url=obj_url, offset=offset, size=chunk_size)
+                if ok is None: # 文件不存在
+                    return (False, 0, result)
+                elif not ok:
+                    return (False, offset, 'downloading interrupt')
+
+                chunk = result.get('chunk', None)
+                obj_size = result.get('obj_size', 0)
+
+                f.seek(offset)
+                f.write(chunk)
+
+                offset += len(chunk)
+                if offset >= obj_size: # 下载完成
+                    return  (True, offset, 'download ok')
+
+    def download_obj(self, bucket_name, path, obj_name, filename, start=0):
+        '''
+        下载一个对象
+
+        :param bucket_name: 存储桶名称
+        :param dir_path: 目录路径
+        :param obj_name: 对象名称
+        :param filename: 对象保存的绝对路径文件名
+        :param start: 开始下载的偏移量
+        :return:
+            (ok, offset, msg)
+            ok: True or False, 指示下载是否成功
+            offset: 已下载对象的偏移量
+            msg: 操作结果描述字符串
+        '''
+        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, path, obj_name) + '/'
+        return self.download_obj_by_url(obj_url=obj_url, filename=filename, start=start)
+
+    def delete_obj_by_url(self, obj_url):
+        '''
+        删除一个对象
+
+        :param obj_url: 对象url
+        :return:
+            (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        try:
+            r = request.delete(url=obj_url)
+        except Exception as e:
+            return (False, None, str(e))
+
+        if r.status_code == 204:
+            return (True, 204, 'delete successful')
+
+        msg = get_response_msg(r)
+        return (False, r.status_code, msg)
+
+    def delete_obj(self, bucket_name, dir_path, obj_name):
+        '''
+        删除一个对象
+
+        :param bucket_name: 存储桶名称
+        :param dir_path: 目录路径
+        :param obj_name: 对象名称
+        :return:
+            (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, dir_path, obj_name) + '/'
+        return self.delete_obj_by_url(obj_url=obj_url)
+
+    def get_obj_info_by_url(self, obj_url):
+        '''
+        获取一个对象的元数据
+
+        :param obj_url: 对象url
+        :return:
+            (data, code, msg)
+            data: 指示请求成功时字典类型的数据，失败时为None
+            code: 请求返回的状态码或None
+            msg: 结果描述字符串
+        '''
+        try:
+            r = request.get(url=obj_url, params={'info': True})
+        except Exception as e:
+            return (None, None, str(e))
+
+        if r.status_code == 200:
+            try:
+                data = r.json()
+            except ValueError as e:
+                return (None, None, '获取无效的json数据：' + str(e))
+
+            return (data, 200, "Get object's metedata successful.")
+
+        msg = get_response_msg(r)
+        return (False, r.status_code, msg)
+
+    def get_obj_info(self, bucket_name, dir_path, obj_name):
+        '''
+        获取一个对象的元数据
+
+        :param bucket_name: 存储桶名称
+        :param dir_path: 目录路径
+        :param obj_name: 对象名称
+        :return:
+            (data, code, msg)
+            data: 指示请求成功时字典类型的数据，失败时为None
+            code: 请求返回的状态码或None
+            msg: 结果描述字符串
+        '''
+        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, dir_path, obj_name) + '/'
+        return self.get_obj_info_by_url(obj_url=obj_url)
+
+    def share_obj_by_url(self, obj_url, share=True, days=0):
+        '''
+        设置对象私有或公有访问权限
+
+        :param obj_url: 对象url
+        :param share: 是否分享，用于设置对象公有或私有, true(公有)，false(私有)
+        :param days: 对象公开分享天数(share=true时有效)，0表示永久公开，负数表示不公开，默认为0
+        :return:
+            (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        try:
+            r = request.patch(url=obj_url, params={'share': share, 'days': days})
+        except Exception as e:
+            return (False, None, str(e))
+
+        if r.status_code == 200:
+            return (True, 200, 'Set object permission successful.')
+
+        msg = get_response_msg(r)
+        return (False, r.status_code, msg)
+
+    def share_obj(self, bucket_name, dir_path, obj_name, share=True, days=0):
+        '''
+        设置对象私有或公有访问权限
+
+        :param bucket_name: 存储桶名称
+        :param dir_path: 目录路径
+        :param obj_name: 对象名称
+        :param share: 是否分享，用于设置对象公有或私有, true(公有)，false(私有)
+        :param days: 对象公开分享天数(share=true时有效)，0表示永久公开，负数表示不公开，默认为0
+        :return:
+            (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, dir_path, obj_name) + '/'
+        return self.share_obj_by_url(obj_url=obj_url, share=share, days=days)
+
+    def create_dir_by_url(self, dir_url):
+        '''
+        创建一个目录
+
+        :param dir_url: 目录url
+        :return: (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        try:
+            r = request.post(dir_url)
+        except request.ConnectionError as e:
+            return (False, 0, str(e))
+
+        msg = get_response_msg(r)
+        if r.status_code == 201:
+            return (True, 201, msg)
+        elif r.status_code == 400:
+            data = r.json()
+            if data.get('existing', '') is True:
+                return (True, 400, msg)
+
+        return (False, r.status_code, msg)
+
+    def create_dir(self, bucket_name, base_dir='', dir_name=''):
+        '''
+        创建一个目录
+
+        :param bucket_name: 桶名
+        :param base_dir: 父目录路径
+        :param dir_name:  目录名
+        :return: (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        if '/' in dir_name:
+            return (False, None, '目录名不能包含“/”')
+
+        if base_dir:
+            bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
+        else:
+            bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
+
+        dir_url = join_url_with_slash(self._DIR_API_URL_BASE, bucket_dir_name) + '/'
+
+        return self.create_dir_by_url(dir_url)
+
+    def create_path(self, bucket_name=None, base_dir='', dir_path=''):
+        '''
+        创建目录路径
+        :param bucket_name: 目录所在的存储桶名称
+        :param base_dir: 要创建的路径dir_path的基路经
+        :param dir_path: 目录路径
+        :return:
+            success: True
+            failure: False
+        '''
+        if dir_path == '':
+            return True
+
+        bucket_name = bucket_name
+        dirs = get_path_breadcrumb(dir_path, base_dir=base_dir)
+
+        # 尝试从头创建整个路径
+        for dir_name, p_dir_path in dirs:
+            ok, *_ = self.create_dir(bucket_name=bucket_name, base_dir=p_dir_path, dir_name=dir_name)
+            if not ok:
+                # 再次尝试
+                ok, *_ = self.create_dir(bucket_name=bucket_name, base_dir=p_dir_path, dir_name=dir_name)
+                if not ok:
+                    return False
+
         return True
 
-    bucket_name = bucket_name
-    dirs = get_path_breadcrumb(dir_path, base_dir=base_dir)
+    def get_objs_and_subdirs_by_url(self, dir_url, limit=None, offset=None):
+        '''
+        获取目录下的对象和子目录
 
-    # 尝试从头创建整个路径
-    for dir_name, p_dir_path in dirs:
-        ok, *_ = create_dir(bucket_name=bucket_name, base_dir=p_dir_path, dir_name=dir_name)
-        if not ok:
-            # 再次尝试
-            ok, *_ = create_dir(bucket_name=bucket_name, base_dir=p_dir_path, dir_name=dir_name)
-            if not ok:
-                return False
+        :param dir_url: 目录url
+        :param limit: 获取目标 数量限制
+        :param offset: 获取目标 起始偏移量
+        :return:
+            (data, code, msg)
+            data: 指示请求成功时字典类型的数据，失败时为None
+            code: 请求返回的状态码或None
+            msg: 结果描述字符串
+        '''
+        params = {}
+        if limit:
+            params['limit'] = limit
 
-    return True
+        if offset:
+            params['offset'] = offset
 
-def get_objs_and_subdirs_by_url(dir_url, limit=None, offset=None):
-    '''
-    获取目录下的对象和子目录
-
-    :param dir_url: 目录url
-    :param limit: 获取目标 数量限制
-    :param offset: 获取目标 起始偏移量
-    :return:
-        (data, code, msg)
-        data: 指示请求成功时字典类型的数据，失败时为None
-        code: 请求返回的状态码或None
-        msg: 结果描述字符串
-    '''
-    params = {}
-    if limit:
-        params['limit'] = limit
-
-    if offset:
-        params['offset'] = offset
-
-    try:
-        r = request.get(dir_url, params=params)
-    except Exception as e:
-        return (None, None, str(e))
-
-    if r.status_code == 200:
         try:
-            data = r.json()
-        except ValueError as e:
-            return (None, None, '获取无效的json数据：' + str(e))
+            r = request.get(dir_url, params=params)
+        except Exception as e:
+            return (None, None, str(e))
 
-        return (data, 200, "Get data successful.")
+        if r.status_code == 200:
+            try:
+                data = r.json()
+            except ValueError as e:
+                return (None, None, '获取无效的json数据：' + str(e))
 
-    msg = get_response_msg(r)
-    return (False, r.status_code, msg)
+            return (data, 200, "Get data successful.")
 
+        msg = get_response_msg(r)
+        return (False, r.status_code, msg)
 
-def delete_dir_by_url(dir_url):
-    '''
-    删除一个目录
+    def get_objs_and_subdirs(self, bucket_name, dir_name, limit=None, offset=None):
+        '''
+        获取目录下的对象和子目录
 
-    :param dir_url: 目录url
-    :return: (ok, code, msg)
-        ok: True or False, 指示请求是否成功
-        code: 请求返回的状态码
-        msg: 请求结果描述字符串
-    '''
-    try:
-        r = request.delete(dir_url)
-    except request.ConnectionError as e:
-        return (False, 0, str(e))
+        :param bucket_name: 存储桶名称
+        :param dir_name: 目录路径
+        :param limit: 获取目标 数量限制
+        :param offset: 获取目标 起始偏移量
+        :return:
+            (data, code, msg)
+            data: 请求成功时字典类型的数据，失败时为None
+            code: 请求返回的状态码或None
+            msg: 结果描述字符串
+        '''
+        dir_url = join_url_with_slash(self._DIR_API_URL_BASE, bucket_name, dir_name) + '/'
+        return self.get_objs_and_subdirs_by_url(dir_url=dir_url, limit=limit, offset=offset)
 
-    msg = get_response_msg(r)
-    if r.status_code == 204:
-        return (True, 204, msg)
+    def delete_dir_by_url(self, dir_url):
+        '''
+        删除一个目录
 
-    return (False, r.status_code, msg)
+        :param dir_url: 目录url
+        :return: (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        try:
+            r = request.delete(dir_url)
+        except request.ConnectionError as e:
+            return (False, 0, str(e))
 
+        msg = get_response_msg(r)
+        if r.status_code == 204:
+            return (True, 204, msg)
 
-def delete_dir(bucket_name, base_dir='', dir_name=''):
-    '''
-    创建一个目录
+        return (False, r.status_code, msg)
 
-    :param bucket_name: 桶名
-    :param base_dir: 父目录路径
-    :param dir_name:  目录名
-    :return: (ok, code, msg)
-        ok: True or False, 指示请求是否成功
-        code: 请求返回的状态码
-        msg: 请求结果描述字符串
-    '''
-    if '/' in dir_name:
-        return (False, None, '目录名不能包含“/”')
+    def delete_dir(self, bucket_name, base_dir='', dir_name=''):
+        '''
+        创建一个目录
 
-    api_dir_base = configs.DIR_API_URL_BASE
-    if base_dir:
-        bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
-    else:
-        bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
+        :param bucket_name: 桶名
+        :param base_dir: 父目录路径
+        :param dir_name:  目录名
+        :return: (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        if '/' in dir_name:
+            return (False, None, '目录名不能包含“/”')
 
-    dir_url = join_url_with_slash(api_dir_base, bucket_dir_name) + '/'
+        if base_dir:
+            bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
+        else:
+            bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
 
-    return delete_dir_by_url(dir_url)
+        dir_url = join_url_with_slash(self._DIR_API_URL_BASE, bucket_dir_name) + '/'
 
+        return self.delete_dir_by_url(dir_url)
 
+    def get_bucket_api_base_url(self):
+        return self._BUCKET_API_URL_BASE if self._BUCKET_API_URL_BASE.endswith('/') else self._BUCKET_API_URL_BASE + '/'
 
+    def create_bucket(self, bucket_name):
+        '''
+        创建一个存储桶
 
+        :param bucket_name: 存储桶名称
+        :return: (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        url = self.get_bucket_api_base_url()
+        try:
+            r = request.post(url=url, data={'name': bucket_name})
+        except request.RequestException as e:
+            return (False, None, str(e))
 
+        msg = get_response_msg(r)
+        if r.status_code == 201:
+            return (True, 201, msg)
+
+        return (False, r.status_code, msg)
+
+    def get_buckets(self):
+        '''
+        获取存储桶列表
+
+        :return: (data, code, msg)
+            data: 请求成功时字典类型的数据，失败时为None
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        url = self.get_bucket_api_base_url()
+        try:
+            r = request.get(url=url)
+        except request.RequestException as e:
+            return (None, None, str(e))
+
+        msg = get_response_msg(r)
+        if r.status_code == 200:
+            try:
+                data = r.json()
+            except ValueError as e:
+                return (None, None, '获取无效的json数据：' + str(e))
+
+            return (data, 200, msg)
+
+        return (None, r.status_code, msg)
+
+    def bucket_permission(self, bucket_id, public=False):
+        '''
+        设置存储桶公有私有权限
+
+        :param bucket_id: 存储桶id
+        :param public: True(公有)，False(私有)
+        :return: (ok, code, msg)
+            ok: True or False, 指示请求是否成功
+            code: 请求返回的状态码
+            msg: 请求结果描述字符串
+        '''
+        base_url = self.get_bucket_api_base_url()
+        url = join_url_with_slash(base_url, str(bucket_id)) + '/'
+        try:
+            r = request.patch(url=url, params={'public': public})
+        except request.RequestException as e:
+            return (False, None, str(e))
+
+        msg = get_response_msg(r)
+        if r.status_code == 200:
+            return (True, 200, msg)
+
+        return (False, r.status_code, msg)
 

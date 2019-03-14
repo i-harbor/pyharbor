@@ -1,5 +1,5 @@
 from requests import sessions, PreparedRequest
-from requests.exceptions import ConnectionError
+from requests.exceptions import (ConnectionError, RequestException, InvalidURL)
 from urllib.parse import unquote
 
 from . import auth_key

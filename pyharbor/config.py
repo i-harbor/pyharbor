@@ -1,7 +1,7 @@
 
 DEFAULT_CONFIGS = {
     'VERSION': 'v1',
-    'SCHEME': 'http',
+    'SCHEME': 'https',
     'DOMAIN_NAME': 'obs.casearth.cn',
     'OBJ_API_PREFIX': 'obj',
     'DIR_API_PREFIX': 'dir',

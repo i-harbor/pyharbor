@@ -1,15 +1,11 @@
 from .config import set_global_auth_key, set_global_settings, configs
-from .api import Client
+from .api import Client, Directory
+from .core import ApiCore
 
-
-DEFAULT_CLIENT = None
 
 def get_client():
-    global DEFAULT_CLIENT
+    return Client()
 
-    if not DEFAULT_CLIENT:
-        DEFAULT_CLIENT = Client()
 
-    return DEFAULT_CLIENT
 
 
