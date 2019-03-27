@@ -144,7 +144,25 @@ else:
 
 ```
 
+##### 分页获取目录下子目录和对象列表
+```python
+import json
+import pyharbor
 
+client = pyharbor.get_client()
+# page = client.bucket('www').dir('upload test').list(per_page=100)
+# 或者
+page = client.list_dir(bucket_name='www', dir_name='upload test', per_page=100)
+if page is not None:
+    objs = page.get_list()
+    print(json.dumps(objs, indent=4))
+    
+    # 获取下一页
+    if page.has_next():
+        next_page = page.next_page()
+        objs = next_page.get_list()
+        print(json.dumps(objs, indent=4))
+```
 
 
 

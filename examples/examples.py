@@ -59,9 +59,9 @@ else:
 # 或者
 ok, offset, msg = client.download_object(bucket_name='www', obj_name='testdir/examples.py', filename='./download')
 if ok:
-    print('下载对象元数据成功：' + msg)
+    print('下载对象成功：' + msg)
 else:
-    print('获取对象元数据失败：' + msg)
+    print('获取对象失败：' + msg)
 
 
 # 获取目录下的子目录和对象信息
@@ -121,4 +121,21 @@ if ok:
     print('桶私有权限设置成功')
 else:
     print('桶私有权限设置失败')
+
+
+# 分页获取目录下子目录和对象列表
+client = pyharbor.get_client()
+# page = client.bucket('www').dir('upload test').list(per_page=100)
+# 或者
+page = client.list_dir(bucket_name='www', dir_name='upload test', per_page=100)
+if page is not None:
+    objs = page.get_list()
+    print(json.dumps(objs, indent=4))
+
+    # 获取下一页
+    if page.has_next():
+        next_page = page.next_page()
+        objs = next_page.get_list()
+        print(json.dumps(objs, indent=4))
+
 

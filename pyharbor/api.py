@@ -9,6 +9,7 @@ class Directory():
         '''
         self._bucket_name = bucket_name
         self._cur_dir_path = cur_dir_path.rstrip('/')
+        self._paginater = None
         self.apicore = ApiCore()
 
     @property
@@ -275,6 +276,28 @@ class Directory():
 
         return self.apicore.get_obj_info(bucket_name=self.bucket_name, dir_path=self.cur_dir_path, obj_name=obj_name)
 
+    def get_paginater(self, per_page=None):
+        '''
+        当前目录分页器
+
+        :param per_page: 每页数据数量
+        :return:
+        '''
+        if not self._paginater:
+            self._paginater = ListDirPaginater(directory=self, per_page=per_page)
+        return self._paginater
+
+    def list(self, per_page=None):
+        '''
+        当前目录下的目录和对象列表的第一页
+
+        :param per_page:  每页数据数量
+        :return:
+            success: ListDirPage()
+            failed: None    网路问题或目录不存在等请求失败
+        '''
+        return self.get_paginater(per_page=per_page).first_page()
+
 
 class Bucket():
     def __init__(self, bucket_name, *args, **kwargs):
@@ -354,6 +377,164 @@ class Bucket():
             return False, msg
 
         return True, msg
+
+
+class BasePage():
+    '''
+    分页基类
+    '''
+    def __init__(self, data):
+        self.apicore = ApiCore()
+        self.__Initialize(data)
+
+    @property
+    def current_page_number(self):
+        return self._current_page_number
+
+    def __set_current_page_number(self, value):
+        self._current_page_number = value
+
+    def __Initialize(self, data):
+        '''
+        __Initialize()  can be implemented.
+        根据data数据结构初始化一下类属性
+        '''
+        page = data.get('page')
+        self.__set_current_page_number(1)
+        self._pages = page.get('final')
+
+        self._current_page = data.get('files')
+        self._count = data.get('count')
+
+        self._next_url = data.get('next')
+        self._previous_url = data.get('previous')
+
+    def has_next(self):
+        '''是否有下一页'''
+        if self._next_url:
+            return True
+
+        return False
+
+    def has_previous(self):
+        '''是否有上一页'''
+        if self._previous_url:
+            return True
+        return False
+
+    @property
+    def next_page_number(self):
+        '''是否有下一页'''
+        if not self.has_next():
+            return None
+
+        return self.current_page_number + 1 if self.current_page_number else None
+
+    @property
+    def previous_page_number(self):
+        '''是否有上一页'''
+        if not self.has_previous():
+            return None
+
+        return self.current_page_number - 1 if self.current_page_number else None
+
+    def get_list(self):
+        return self._current_page
+
+    def next_page(self):
+        raise NotImplementedError('`next_page()` must be implemented.')
+
+    def previous_page(self):
+        raise NotImplementedError('`previous_page()` must be implemented.')
+
+
+class ListDirPage(BasePage):
+    '''
+    目录下子目录和对象信息列表分页类
+    '''
+    def __Initialize(self, data):
+        page = data.get('page')
+        self.__set_current_page_number(page.get('current'))
+        self._pages = page.get('final')
+
+        self._current_page = data.get('files')
+        self._count = data.get('count')
+
+        self._next_url = data.get('next')
+        self._previous_url = data.get('previous')
+
+    def next_page(self):
+        '''
+        下一页
+
+        :return:
+            success: Page()
+            failed: None     请求失败或者没有下一页
+        '''
+        if not self.has_next():
+            return None
+
+        data, code, msg = self.apicore.get_objs_and_subdirs_by_url(dir_url=self._next_url)
+        if not data:
+            return None
+
+        return ListDirPage(data)
+
+    def previous_page(self):
+        '''
+        上一页
+
+        :return:
+            success: Page()
+            failed: None     请求失败或者没有上一页
+        '''
+        if not self.has_previous():
+            return None
+
+        data, code, msg = self.apicore.get_objs_and_subdirs_by_url(dir_url=self._previous_url)
+        if not data:
+            return None
+
+        return ListDirPage(data)
+
+
+class ListDirPaginater():
+    def __init__(self, directory, per_page=None):
+        '''
+        :param directory: Directory class object
+        :param per_page: number per page
+        '''
+        self.dir = directory
+        self._per_page = per_page or 200
+        self._page = None
+
+    @property
+    def dir(self):
+        return self._dir
+
+    @dir.setter
+    def dir(self, value):
+        if not isinstance(value, Directory):
+            raise ValueError('value must be a Directory class object')
+
+        self._dir = value
+        self._page = None
+
+    def first_page(self):
+        '''
+        目录下子目录和对象信息列表第一页
+        :return:
+            success: ListDirPage()
+            failed: None    网路问题或目录不存在等请求失败
+        '''
+        if not self._page:
+            data, code, msg = self.dir.get_objs_and_subdirs(self, limit=self._per_page)
+            if not data:
+                return None
+            else:
+                self._page = ListDirPage(data)
+
+        return self._page
 
 
 def get_path_and_name(p):
@@ -512,8 +693,18 @@ class Client():
         '''
         return Bucket(bucket_name).set_permission(public=public)
 
+    def list_dir(self, bucket_name, dir_name='', per_page=None):
+        '''
+        删除一个文件夹
 
-
+        :param bucket_name:  存储桶名称
+        :param dir_name:  目录名全路径
+        :param per_page:  每页数据项数
+        :return:
+            success: ListDirPage()
+            failed: None    网路问题或目录不存在等请求失败
+        '''
+        return Directory(bucket_name=bucket_name, cur_dir_path=dir_name).list(per_page=per_page)
 
 
 
