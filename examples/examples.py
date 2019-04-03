@@ -124,10 +124,9 @@ else:
 
 
 # 分页获取目录下子目录和对象列表
-client = pyharbor.get_client()
 # page = client.bucket('www').dir('upload test').list(per_page=100)
 # 或者
-page = client.list_dir(bucket_name='www', dir_name='upload test', per_page=100)
+page = client.list_dir(bucket_name='www', dir_name='upload test', per_page=2)
 if page is not None:
     objs = page.get_list()
     print(json.dumps(objs, indent=4))
@@ -138,4 +137,20 @@ if page is not None:
         objs = next_page.get_list()
         print(json.dumps(objs, indent=4))
 
+
+# 上传一个数据块到对象
+ok, msg = client.write_one_chunk(bucket_name='www', obj_name='upload test/test_chunk', offset=0, chunk=b'hello')
+if ok:
+    print('已成功上传一个数据块到对象,', msg)
+else:
+    print('上传一个数据块到对象失败,', msg)
+
+# 从对象读取一个指定大小的数据块
+ok, data = client.read_one_chunk(bucket_name='www', obj_name='upload test/test_chunk', offset=0, size=10)
+if ok:
+    chunk = data.get('chunk')
+    obj_size = data.get('obj_size')
+    print('已成功从对象读取一个指定大小的数据块:' + chunk.decode() + ';对象总大小：{0}'.format(obj_size))
+else:
+    print('从对象读取一个指定大小的数据块失败,', msg)
 

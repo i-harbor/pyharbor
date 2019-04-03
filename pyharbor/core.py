@@ -88,15 +88,62 @@ def get_path_breadcrumb(path=None, base_dir=''):
         breadcrumb.append([key, '/'.join(base + dirs[0:i])])
     return breadcrumb
 
+class ApiUrlBuilder():
+    '''
+    API url构建类
+    '''
+    def __init__(self):
+        self._DIR_API_URL_BASE = configs.DIR_API_URL_BASE
+        self._OBJ_API_URL_BASE = configs.OBJ_API_URL_BASE
+        self._BUCKET_API_URL_BASE = configs.BUCKET_API_URL_BASE
+
+    def build_obj_url(self, bucket_name, path, obj_name):
+        '''
+        构建对象url
+
+        :param bucket_name: 桶名
+        :param path: 父目录路径
+        :param obj_name:  对象名
+        '''
+        return join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, path, obj_name) + '/'
+
+    def build_dir_url(self, bucket_name, path='', dir_name=''):
+        '''
+        构建目录url
+
+        :param bucket_name: 桶名
+        :param path: 父目录路径
+        :param dir_name:  目录名
+        '''
+        return join_url_with_slash(self._DIR_API_URL_BASE, bucket_name, path, dir_name) + '/'
+
+    def get_bucket_api_base_url(self):
+        return self._BUCKET_API_URL_BASE if self._BUCKET_API_URL_BASE.endswith('/') else self._BUCKET_API_URL_BASE + '/'
+
+    def build_bucket_url(self, bucket_id=None):
+        '''
+        构建桶url
+
+        :param bucket_id: 桶ID
+        :return:
+        '''
+        base_url = self.get_bucket_api_base_url()
+        if not bucket_id:
+            return base_url
+
+        if not isinstance(bucket_id, str):
+            bucket_id = str(bucket_id)
+
+        return join_url_with_slash(base_url, bucket_id) + '/'
+
+
 
 class ApiCore():
     '''
     EVHarbor API 封装
     '''
     def __init__(self):
-        self._DIR_API_URL_BASE = configs.DIR_API_URL_BASE
-        self._OBJ_API_URL_BASE = configs.OBJ_API_URL_BASE
-        self._BUCKET_API_URL_BASE = configs.BUCKET_API_URL_BASE
+        self._url_builder = ApiUrlBuilder()
 
     def upload_one_chunk(self, obj_url, offset, chunk, **kwargs):
         '''
@@ -126,6 +173,23 @@ class ApiCore():
             return (None, r.status_code, msg)
 
         return False, r.status_code, msg
+
+    def write_one_chunk(self, bucket_name, path, obj_name, offset, chunk, **kwargs):
+        '''
+        上传一个分片
+
+        :param bucket_name: 桶
+        :param path:  对象所在目录路径
+        :param obj_name: 对象名称
+        :param offset: 分片偏移量
+        :param chunk: 分片
+        :return:
+            success: (True, code, msg)
+            failure: (False, code, msg)
+            可能参数有误，目录路径不存在等各种原因不具备上传条件: (None, 0, msg)
+        '''
+        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=path, obj_name=obj_name)
+        return self.upload_one_chunk(obj_url=obj_url, offset=offset, chunk=chunk, **kwargs)
 
     def upload_obj_by_url(self, obj_url, filename, start=0):
         '''
@@ -176,8 +240,25 @@ class ApiCore():
             offset: 已上传文件的偏移量
             msg: 上传结果描述字符串
         '''
-        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, path, obj_name) + '/'
+        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=path, obj_name=obj_name)
         return self.upload_obj_by_url(obj_url=obj_url, filename=filename, start=start)
+
+    def read_one_chunk(self, bucket_name, path, obj_name, offset, size):
+        '''
+        下载一个分片
+
+        :param bucket_name: 桶
+        :param path:  对象所在目录路径
+        :param obj_name: 对象名称
+        :param offset: 分片偏移量
+        :param size: 要下载的分片大小
+        :return:
+            success: (True, {'chunk': chunk, 'obj_size': xx})
+            failure: (False, msg)
+            404: (None, msg) 资源不存在
+        '''
+        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=path, obj_name=obj_name)
+        return self.download_one_chunk(obj_url=obj_url, offset=offset, size=size)
 
     def download_one_chunk(self, obj_url, offset, size):
         '''
@@ -284,7 +365,7 @@ class ApiCore():
             offset: 已下载对象的偏移量
             msg: 操作结果描述字符串
         '''
-        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, path, obj_name) + '/'
+        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=path, obj_name=obj_name)
         return self.download_obj_by_url(obj_url=obj_url, filename=filename, start=start)
 
     def delete_obj_by_url(self, obj_url):
@@ -322,7 +403,7 @@ class ApiCore():
             code: 请求返回的状态码
             msg: 请求结果描述字符串
         '''
-        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, dir_path, obj_name) + '/'
+        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=dir_path, obj_name=obj_name)
         return self.delete_obj_by_url(obj_url=obj_url)
 
     def get_obj_info_by_url(self, obj_url):
@@ -365,7 +446,7 @@ class ApiCore():
             code: 请求返回的状态码或None
             msg: 结果描述字符串
         '''
-        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, dir_path, obj_name) + '/'
+        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=dir_path, obj_name=obj_name)
         return self.get_obj_info_by_url(obj_url=obj_url)
 
     def share_obj_by_url(self, obj_url, share=True, days=0):
@@ -407,7 +488,7 @@ class ApiCore():
             code: 请求返回的状态码
             msg: 请求结果描述字符串
         '''
-        obj_url = join_url_with_slash(self._OBJ_API_URL_BASE, bucket_name, dir_path, obj_name) + '/'
+        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=dir_path, obj_name=obj_name)
         return self.share_obj_by_url(obj_url=obj_url, share=share, days=days)
 
     def create_dir_by_url(self, dir_url):
@@ -450,13 +531,7 @@ class ApiCore():
         if '/' in dir_name:
             return (False, None, '目录名不能包含“/”')
 
-        if base_dir:
-            bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
-        else:
-            bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
-
-        dir_url = join_url_with_slash(self._DIR_API_URL_BASE, bucket_dir_name) + '/'
-
+        dir_url = self._url_builder.build_dir_url(bucket_name=bucket_name, path=base_dir, dir_name=dir_name)
         return self.create_dir_by_url(dir_url)
 
     def create_path(self, bucket_name=None, base_dir='', dir_path=''):
@@ -527,7 +602,7 @@ class ApiCore():
         获取目录下的对象和子目录
 
         :param bucket_name: 存储桶名称
-        :param dir_name: 目录路径
+        :param dir_name: 目录绝对路径
         :param limit: 获取目标 数量限制
         :param offset: 获取目标 起始偏移量
         :return:
@@ -536,7 +611,7 @@ class ApiCore():
             code: 请求返回的状态码或None
             msg: 结果描述字符串
         '''
-        dir_url = join_url_with_slash(self._DIR_API_URL_BASE, bucket_name, dir_name) + '/'
+        dir_url = self._url_builder.build_dir_url(bucket_name=bucket_name, path=dir_name)
         return self.get_objs_and_subdirs_by_url(dir_url=dir_url, limit=limit, offset=offset)
 
     def delete_dir_by_url(self, dir_url):
@@ -575,17 +650,8 @@ class ApiCore():
         if '/' in dir_name:
             return (False, None, '目录名不能包含“/”')
 
-        if base_dir:
-            bucket_dir_name = join_url_with_slash(bucket_name, base_dir, dir_name)
-        else:
-            bucket_dir_name = join_url_with_slash(bucket_name, dir_name)
-
-        dir_url = join_url_with_slash(self._DIR_API_URL_BASE, bucket_dir_name) + '/'
-
+        dir_url = self._url_builder.build_dir_url(bucket_name=bucket_name, path=base_dir, dir_name=dir_name)
         return self.delete_dir_by_url(dir_url)
-
-    def get_bucket_api_base_url(self):
-        return self._BUCKET_API_URL_BASE if self._BUCKET_API_URL_BASE.endswith('/') else self._BUCKET_API_URL_BASE + '/'
 
     def create_bucket(self, bucket_name):
         '''
@@ -597,7 +663,7 @@ class ApiCore():
             code: 请求返回的状态码
             msg: 请求结果描述字符串
         '''
-        url = self.get_bucket_api_base_url()
+        url = self._url_builder.build_bucket_url()
         try:
             r = request.post(url=url, data={'name': bucket_name})
         except request.RequestException as e:
@@ -618,7 +684,7 @@ class ApiCore():
             code: 请求返回的状态码
             msg: 请求结果描述字符串
         '''
-        url = self.get_bucket_api_base_url()
+        url = self._url_builder.build_bucket_url()
         try:
             r = request.get(url=url)
         except request.RequestException as e:
@@ -646,8 +712,7 @@ class ApiCore():
             code: 请求返回的状态码
             msg: 请求结果描述字符串
         '''
-        base_url = self.get_bucket_api_base_url()
-        url = join_url_with_slash(base_url, str(bucket_id)) + '/'
+        url = self._url_builder.build_bucket_url(bucket_id=bucket_id)
         try:
             r = request.patch(url=url, params={'public': public})
         except request.RequestException as e:

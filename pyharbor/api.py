@@ -706,6 +706,37 @@ class Client():
         '''
         return Directory(bucket_name=bucket_name, cur_dir_path=dir_name).list(per_page=per_page)
 
+    def write_one_chunk(self, bucket_name, obj_name, offset, chunk):
+        '''
+        上传一个分片
 
+        :param bucket_name: 桶
+        :param obj_name: 对象绝对路径
+        :param offset: 分片偏移量
+        :param chunk: 分片数据 bytes或者二进制方式打开的文件描述符, 数据不等大于20MB
+        :return:
+            success: (True,  msg)
+            failure: (False, msg)
+            可能参数有误，目录路径不存在等各种原因不具备上传条件: (None, msg)
+        '''
+        ok, code, msg = ApiCore().write_one_chunk(bucket_name=bucket_name, path=obj_name, obj_name='', offset=offset, chunk=chunk)
+        return ok, msg
 
+    def read_one_chunk(self, bucket_name, obj_name, offset, size):
+        '''
+        下载一个分片
+
+        :param bucket_name: 桶
+        :param obj_name: 对象绝对路径
+        :param offset: 分片偏移量
+        :param size: 要下载的分片大小
+        :return:
+            success: (True, {
+                                'chunk': chunk, # bytes
+                                'obj_size': xx  # 对象总大小
+                            })
+            failure: (False, msg)
+            404: (None, msg) 资源不存在
+        '''
+        return ApiCore().read_one_chunk(bucket_name=bucket_name, path=obj_name, obj_name='', offset=offset, size=size)
 

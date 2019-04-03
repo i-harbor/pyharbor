@@ -144,7 +144,7 @@ else:
 
 ```
 
-##### 分页获取目录下子目录和对象列表
+#### 分页获取目录下子目录和对象列表
 ```python
 import json
 import pyharbor
@@ -164,5 +164,29 @@ if page is not None:
         print(json.dumps(objs, indent=4))
 ```
 
+ #### 上传一个数据块到对象
+ ```python
+import pyharbor
 
+client = pyharbor.get_client()
+ok, msg = client.write_one_chunk(bucket_name='www', obj_name='upload test/test_chunk', offset=0, chunk=b'hello')
+if ok:
+    print('successful', msg)
+else:
+    print('failed,', msg)
+```
+
+#### 从对象读取一个指定大小的数据块
+```python
+import pyharbor
+
+client = pyharbor.get_client()
+ok, data = client.read_one_chunk(bucket_name='www', obj_name='upload test/test_chunk', offset=0, size=10)
+if ok:
+    chunk = data.get('chunk') # 数据块 bytes
+    obj_size = data.get('obj_size') # 对象总大小
+    print('successful')
+else:
+    print('failed,', data)
+```
 
