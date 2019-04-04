@@ -96,6 +96,7 @@ class ApiUrlBuilder():
         self._DIR_API_URL_BASE = configs.DIR_API_URL_BASE
         self._OBJ_API_URL_BASE = configs.OBJ_API_URL_BASE
         self._BUCKET_API_URL_BASE = configs.BUCKET_API_URL_BASE
+        self._MOVE_API_URL_BASE = configs.MOVE_API_URL_BASE
 
     def build_obj_url(self, bucket_name, path, obj_name):
         '''
@@ -136,6 +137,15 @@ class ApiUrlBuilder():
 
         return join_url_with_slash(base_url, bucket_id) + '/'
 
+    def build_move_url(self, bucket_name, path, obj_name):
+        '''
+        构建对象移动重命名url
+
+        :param bucket_name: 桶名
+        :param path: 父目录路径
+        :param obj_name:  对象名
+        '''
+        return join_url_with_slash(self._MOVE_API_URL_BASE, bucket_name, path, obj_name) + '/'
 
 
 class ApiCore():
@@ -723,4 +733,45 @@ class ApiCore():
             return (True, 200, msg)
 
         return (False, r.status_code, msg)
+
+    def move_obj(self, bucket_name, path, obj_name, move_to=None, rename=None):
+        '''
+        移动或重命名一个对象
+
+        :param bucket_name: 桶名称
+        :param path:  对象所在父目录路径
+        :param obj_name: 对象名称
+        :param move_to: 移动对象到此目录路径，None为不移动
+        :param rename: 重命名对象
+        :return: (ok, data)
+            ok: True or False, 指示请求是否成功
+            data: dict{
+                    code: xx,   # 请求返回的状态码
+                    msg: xx,    # 请求结果描述字符串
+                    obj: { ]    # 移动后的对象信息，此数据仅移动成功时存在
+                }
+        '''
+        params = {}
+        if move_to:
+            params['move_to'] = move_to
+
+        if rename:
+            params['rename'] = rename
+
+        url = self._url_builder.build_move_url(bucket_name=bucket_name, path=path, obj_name=obj_name)
+        try:
+            r = request.post(url=url, params=params)
+        except request.RequestException as e:
+            return False, {'code': None, 'msg': str(e)}
+
+        msg = get_response_msg(r)
+        if r.status_code == 201:
+            try:
+                data = r.json()
+            except ValueError as e:
+                return True, {'code': None, 'msg': '获取无效的json数据：' + str(e)}
+
+            return True, {'code': 201, 'msg': msg, 'obj': data.get('obj')} ,
+
+        return False, {'code': r.status_code, 'msg': msg}
 

@@ -1,4 +1,10 @@
-## 全局配置 
+## Require
+```
+pip install requests
+```
+
+## Quick Start
+#### 全局配置 
 首先使用前要先进行配置，包括访问密钥（access_key和secret_key）,域名等   
 ```python
 import pyharbor
@@ -10,9 +16,6 @@ pyharbor.set_global_settings({
     'SECRET_KEY': '93c74b39396abd09cb0720a1af52c5c27690a2b8',
     })
 ```
-
-## Quick Start
-
 #### 上传一个文件
 ```python
 import os
@@ -190,3 +193,49 @@ else:
     print('failed,', data)
 ```
 
+#### 重命名对象
+```python
+import json
+import pyharbor
+
+client = pyharbor.get_client()
+ok, data = client.rename_object(bucket_name='wwww', obj_name='dd/test.txt', rename='test2.txt')
+# or
+# ok, data = client.bucket('wwww').dir('dd').rename_object(obj_name='test.txt', rename='test2.txt')
+if ok:
+    print('重命名成功:', json.dumps(data, indent=4))
+    obj = data.get('obj') # 移动后对象信息
+else:
+    print('重命名失败:', json.dumps(data, indent=4))
+```
+#### 移动一个对象
+```python
+import json
+import pyharbor
+
+client = pyharbor.get_client()
+ok, data = client.move_object(bucket_name='wwww', obj_name='dd/test2.txt', to='cc')
+# or
+# ok, data = client.bucket('wwww').dir('dd').move_object(obj_name='test2.txt', to='cc')
+if ok:
+    print('移动成功:', json.dumps(data, indent=4))
+    obj = data.get('obj') # 移动后对象信息
+else:
+    print('移动失败:', json.dumps(data, indent=4))
+```
+
+#### 移动并重命名对象
+```python
+import json
+import pyharbor
+
+client = pyharbor.get_client()
+ok, data = client.move_object(bucket_name='wwww', obj_name='cc/test2.txt', to='dd', rename='test.txt')
+# or
+# ok, data = client.bucket('wwww').dir('cc').move_object(obj_name='test2.txt', to='dd', rename='test.txt')
+if ok:
+    print('移动重命名成功:', json.dumps(data, indent=4))
+    obj = data.get('obj') # 移动后对象信息
+else:
+    print('移动重命名失败:', json.dumps(data, indent=4))
+```

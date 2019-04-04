@@ -154,3 +154,36 @@ if ok:
 else:
     print('从对象读取一个指定大小的数据块失败,', msg)
 
+
+# 重命名对象
+ok, data = client.rename_object(bucket_name='wwww', obj_name='dd/test.txt', rename='test2.txt')
+# or
+# ok, data = client.bucket('wwww').dir('dd').rename_object(obj_name='test.txt', rename='test2.txt')
+if ok:
+    print('重命名成功:', json.dumps(data, indent=4))
+    obj = data.get('obj') # 移动后对象信息
+else:
+    print('重命名失败:', json.dumps(data, indent=4))
+
+# 移动一个对象
+ok, data = client.move_object(bucket_name='wwww', obj_name='dd/test2.txt', to='cc')
+# or
+# ok, data = client.bucket('wwww').dir('dd').move_object(obj_name='test2.txt', to='cc')
+if ok:
+    print('移动成功:', json.dumps(data, indent=4))
+    obj = data.get('obj') # 移动后对象信息
+else:
+    print('移动失败:', json.dumps(data, indent=4))
+
+
+# 移动并重命名对象
+ok, data = client.move_object(bucket_name='wwww', obj_name='cc/test2.txt', to='dd', rename='test.txt')
+# or
+# ok, data = client.bucket('wwww').dir('cc').move_object(obj_name='test2.txt', to='dd', rename='test.txt')
+if ok:
+    print('移动重命名成功:', json.dumps(data, indent=4))
+    obj = data.get('obj') # 移动后对象信息
+else:
+    print('移动重命名失败:', json.dumps(data, indent=4))
+
+

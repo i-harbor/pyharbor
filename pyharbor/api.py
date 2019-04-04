@@ -298,6 +298,51 @@ class Directory():
         '''
         return self.get_paginater(per_page=per_page).first_page()
 
+    def move_object(self, obj_name, to, rename=None):
+        '''
+        移动重命名对象
+
+        :param obj_name: 要移动的对象名
+        :param to:  对象移动目标目录路径， '/'和空字符串表示bucket桶下根目录
+        :param rename:  重命名对象新名称， 默认不重命名
+        :return:  (ok, data)
+            ok: True or False, 指示请求是否成功
+            data: dict{
+                    code: xx,   # 请求返回的状态码
+                    msg: xx,    # 请求结果描述字符串
+                    obj: { ]    # 移动后的对象信息，此数据仅移动成功时存在
+                }
+        '''
+        if '/' in obj_name or (rename and '/' in  rename):
+            return False, '对象名称不能包含“/”字符'
+        if rename and len(rename) > 255:
+            return False, '对象名称长度不能大于255个字符'
+
+        return self.apicore.move_obj(bucket_name=self.bucket_name, path=self.cur_dir_path, obj_name=obj_name,
+                                              move_to=to, rename=rename)
+
+    def rename_object(self, obj_name, rename):
+        '''
+        重命名对象
+
+        :param obj_name: 要移动的对象名
+        :param rename: 新对象名称
+        :return: (ok, data)
+            ok: True or False, 指示请求是否成功
+            data: dict{
+                    code: xx,   # 请求返回的状态码
+                    msg: xx,    # 请求结果描述字符串
+                    obj: { ]    # 移动后的对象信息，此数据仅移动成功时存在
+                }
+        '''
+        if '/' in obj_name or (rename and '/' in  rename):
+            return False, '对象名称不能包含“/”字符'
+        if rename and len(rename) > 255:
+            return False, '对象名称长度不能大于255个字符'
+
+        return self.apicore.move_obj(bucket_name=self.bucket_name, path=self.cur_dir_path, obj_name=obj_name,
+                                              rename=rename)
+
 
 class Bucket():
     def __init__(self, bucket_name, *args, **kwargs):
@@ -740,3 +785,39 @@ class Client():
         '''
         return ApiCore().read_one_chunk(bucket_name=bucket_name, path=obj_name, obj_name='', offset=offset, size=size)
 
+    def move_object(self, bucket_name, obj_name, to, rename=None):
+        '''
+        移动重命名对象
+
+        :param bucket_name: 对象所在bucket桶名
+        :param obj_name: 要移动的对象名全路径
+        :param to:  对象移动目标目录路径， '/'和空字符串表示bucket桶下根目录
+        :param rename:  重命名对象新名称， 默认不重命名
+        :return:  (ok, data)
+            ok: True or False, 指示请求是否成功
+            data: dict{
+                    code: xx,   # 请求返回的状态码
+                    msg: xx,    # 请求结果描述字符串
+                    obj: { ]    # 移动后的对象信息，此数据仅移动成功时存在
+                }
+        '''
+        path, name = get_path_and_name(obj_name)
+        return Directory(bucket_name=bucket_name, cur_dir_path=path).move_object(obj_name=name, to=to, rename=rename)
+
+    def rename_object(self, bucket_name, obj_name, rename):
+        '''
+        重命名对象
+
+        :param bucket_name: 对象所在bucket桶名
+        :param obj_name: 要移动的对象名
+        :param rename: 新对象名称
+        :return:(ok, data)
+            ok: True or False, 指示请求是否成功
+            data: dict{
+                    code: xx,   # 请求返回的状态码
+                    msg: xx,    # 请求结果描述字符串
+                    obj: { ]    # 移动后的对象信息，此数据仅移动成功时存在
+                }
+        '''
+        path, name = get_path_and_name(obj_name)
+        return Directory(bucket_name=bucket_name, cur_dir_path=path).rename_object(obj_name=name, rename=rename)

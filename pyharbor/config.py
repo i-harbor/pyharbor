@@ -6,6 +6,7 @@ DEFAULT_CONFIGS = {
     'OBJ_API_PREFIX': 'obj',
     'DIR_API_PREFIX': 'dir',
     'BUCKET_API_PREFIX': 'buckets',
+    'MOVE_API_PREFIX': 'move',
 }
 
 def set_global_settings(settings):
@@ -39,19 +40,16 @@ def _prepare_settings(settings):
     settings['API_VERSION_URL'] = api_version_url
 
     # 对象API基url
-    obj_api_prefix = settings['OBJ_API_PREFIX']
-    obj_api_url_base = join_url_with_slash(api_version_url, obj_api_prefix)
-    settings['OBJ_API_URL_BASE'] = obj_api_url_base
+    settings['OBJ_API_URL_BASE'] = join_url_with_slash(api_version_url, settings['OBJ_API_PREFIX'])
 
     # 目录API基url
-    dir_api_prefix = settings['DIR_API_PREFIX']
-    dir_api_url_base = join_url_with_slash(api_version_url, dir_api_prefix)
-    settings['DIR_API_URL_BASE'] = dir_api_url_base
+    settings['DIR_API_URL_BASE'] = join_url_with_slash(api_version_url, settings['DIR_API_PREFIX'])
 
     # 存储桶API基url
-    bucket_api_prefix = settings['BUCKET_API_PREFIX']
-    bucket_api_url_base = join_url_with_slash(api_version_url, bucket_api_prefix)
-    settings['BUCKET_API_URL_BASE'] = bucket_api_url_base
+    settings['BUCKET_API_URL_BASE'] = join_url_with_slash(api_version_url, settings['BUCKET_API_PREFIX'])
+
+    # 对象移动重命名API基url
+    settings['MOVE_API_URL_BASE'] = join_url_with_slash(api_version_url, settings['MOVE_API_PREFIX'])
 
     return settings
 
