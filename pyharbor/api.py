@@ -821,3 +821,40 @@ class Client():
         '''
         path, name = get_path_and_name(obj_name)
         return Directory(bucket_name=bucket_name, cur_dir_path=path).rename_object(obj_name=name, rename=rename)
+
+    def isdir(self, bucket_name, dir_name):
+        '''
+        是否是目录
+        :param bucket_name: 桶名
+        :param dir_name: 全路径目录名
+        :return:
+            True: 是目录
+            False: 对象或不存在此路径
+        '''
+        data, code, msg = ApiCore().get_metadata(bucket_name=bucket_name, path=dir_name)
+        try:
+            if data and data.get('data').get('fod') == False:
+                return True
+        except AttributeError:
+            pass
+
+        return False
+
+    def isfile(self, bucket_name, filename):
+        '''
+        是否是对象
+        :param bucket_name: 桶名
+        :param filename: 全路径文件名
+        :return:
+            True: 是文件
+            False: 目录或不存在此路径
+        '''
+        data, code, msg = ApiCore().get_metadata(bucket_name=bucket_name, path=filename)
+        try:
+            if data and data.get('data').get('fod'):
+                return True
+        except AttributeError:
+            pass
+
+        return False
+

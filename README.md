@@ -239,3 +239,22 @@ if ok:
 else:
     print('移动重命名失败:', json.dumps(data, indent=4))
 ```
+
+#### 是否是目录
+```python
+import pyharbor
+
+client = pyharbor.get_client()
+ok = client.isdir(bucket_name='wwww', dir_name='cc/dd')
+print(ok) # True or False
+```
+
+
+#### 是否是文件对象
+```python
+import pyharbor
+
+client = pyharbor.get_client()
+ok = client.isfile(bucket_name='wwww', filename='cc/dd/api.py')
+print(ok) # True or False
+```

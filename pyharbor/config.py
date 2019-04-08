@@ -7,6 +7,7 @@ DEFAULT_CONFIGS = {
     'DIR_API_PREFIX': 'dir',
     'BUCKET_API_PREFIX': 'buckets',
     'MOVE_API_PREFIX': 'move',
+    'METADATA_API_PREFIX': 'metadata',
 }
 
 def set_global_settings(settings):
@@ -50,6 +51,9 @@ def _prepare_settings(settings):
 
     # 对象移动重命名API基url
     settings['MOVE_API_URL_BASE'] = join_url_with_slash(api_version_url, settings['MOVE_API_PREFIX'])
+
+    # 元数据API基url
+    settings['METADATA_API_URL_BASE'] = join_url_with_slash(api_version_url, settings['METADATA_API_PREFIX'])
 
     return settings
 

@@ -97,6 +97,7 @@ class ApiUrlBuilder():
         self._OBJ_API_URL_BASE = configs.OBJ_API_URL_BASE
         self._BUCKET_API_URL_BASE = configs.BUCKET_API_URL_BASE
         self._MOVE_API_URL_BASE = configs.MOVE_API_URL_BASE
+        self._METADATA_API_URL_BASE = configs.METADATA_API_URL_BASE
 
     def build_obj_url(self, bucket_name, path, obj_name):
         '''
@@ -146,6 +147,15 @@ class ApiUrlBuilder():
         :param obj_name:  对象名
         '''
         return join_url_with_slash(self._MOVE_API_URL_BASE, bucket_name, path, obj_name) + '/'
+
+    def build_metadata_url(self, bucket_name, path):
+        '''
+        构建元数据url
+
+        :param bucket_name: 桶名
+        :param path: 对象或目录路径
+        '''
+        return join_url_with_slash(self._METADATA_API_URL_BASE, bucket_name, path) + '/'
 
 
 class ApiCore():
@@ -458,6 +468,33 @@ class ApiCore():
         '''
         obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=dir_path, obj_name=obj_name)
         return self.get_obj_info_by_url(obj_url=obj_url)
+
+    def get_metadata(self, bucket_name, path):
+        '''
+        获取元数据
+        :param bucket_name: 桶名
+        :param path: 对象或目录路径
+        :return:  (data, code, msg)
+            data: 指示请求成功时字典类型的数据，失败时为None
+            code: 请求返回的状态码或None
+            msg: 结果描述字符串
+        '''
+        url = self._url_builder.build_metadata_url(bucket_name=bucket_name, path=path)
+        try:
+            r = request.get(url=url)
+        except Exception as e:
+            return (None, None, str(e))
+
+        if r.status_code == 200:
+            try:
+                data = r.json()
+            except ValueError as e:
+                return (None, None, '获取无效的json数据：' + str(e))
+
+            return (data, 200, "Get metedata successful.")
+
+        msg = get_response_msg(r)
+        return (False, r.status_code, msg)
 
     def share_obj_by_url(self, obj_url, share=True, days=0):
         '''

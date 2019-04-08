@@ -186,4 +186,10 @@ if ok:
 else:
     print('移动重命名失败:', json.dumps(data, indent=4))
 
+# 是否是目录
+ok = client.isdir(bucket_name='wwww', dir_name='cc/dd')
+print(ok)
 
+# 是否是文件对象
+ok = client.isfile(bucket_name='wwww', filename='cc/dd/api.py')
+print(ok)
