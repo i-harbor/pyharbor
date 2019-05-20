@@ -178,7 +178,7 @@ class ApiCore():
             可能参数有误，目录路径不存在等各种原因不具备上传条件: (None, 0, msg)
         '''
         try:
-            r = request.put(obj_url, files={'chunk': chunk},
+            r = request.post(obj_url, files={'chunk': chunk},
                 data={"chunk_offset": offset, "chunk_size": len(chunk)}, **kwargs)
         except request.ConnectionError as e:
             return (False, 0, str(e))
