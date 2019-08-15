@@ -1,4 +1,5 @@
 from .core import ApiCore
+from .config import join_url_with_slash
 
 
 class Directory():
@@ -260,9 +261,9 @@ class Directory():
                                                obj_name=obj_name, share=share, days=days)
         return ok, msg
 
-    def get_obj_info(self, obj_name):
+    def get_metadata(self, obj_name):
         '''
-        获取一个对象的元数据
+        获取一个对象或目录的元数据
 
         :param obj_url: 对象url
         :return:
@@ -274,7 +275,9 @@ class Directory():
         if '/' in obj_name:
             return (False, 0, 'Object names cannot contain "/" characters.')
 
-        return self.apicore.get_obj_info(bucket_name=self.bucket_name, dir_path=self.cur_dir_path, obj_name=obj_name)
+        path = join_url_with_slash(self.cur_dir_path, obj_name)
+
+        return self.apicore.get_metadata(bucket_name=self.bucket_name, path=path)
 
     def get_paginater(self, per_page=None):
         '''
@@ -671,22 +674,6 @@ class Client():
         ok, msg = Directory(bucket_name=bucket_name, cur_dir_path=path).share_object(obj_name=name, share=share, days=days)
         return ok, msg
 
-    def get_obj_info(self, bucket_name, obj_name):
-        '''
-        获取一个对象的元数据
-
-        :param bucket_name: 存储桶名称
-        :param obj_name: 对象全路径名称
-        :return:
-            (data, code, msg)
-            data: 指示请求成功时字典类型的数据，失败时为None
-            code: 请求返回的状态码或None
-            msg: 结果描述字符串
-        '''
-        path, name = get_path_and_name(obj_name)
-        return Directory(bucket_name=bucket_name, cur_dir_path=path).get_obj_info(obj_name=name)
-
-
     def create_dir(self, bucket_name, dir_name):
         '''
         创建一个文件夹
@@ -831,7 +818,7 @@ class Client():
             True: 是目录
             False: 对象或不存在此路径
         '''
-        data, code, msg = ApiCore().get_metadata(bucket_name=bucket_name, path=dir_name)
+        data, code, msg = self.get_metadata(bucket_name=bucket_name, filename=dir_name)
         try:
             if data and data.get('data').get('fod') == False:
                 return True
@@ -849,7 +836,7 @@ class Client():
             True: 是文件
             False: 目录或不存在此路径
         '''
-        data, code, msg = ApiCore().get_metadata(bucket_name=bucket_name, path=filename)
+        data, code, msg = self.get_metadata(bucket_name=bucket_name, filename=filename)
         try:
             if data and data.get('data').get('fod'):
                 return True
@@ -857,4 +844,19 @@ class Client():
             pass
 
         return False
+
+    def get_metadata(self, bucket_name, filename):
+        '''
+        获取一个对象或目录的元数据
+        :param bucket_name: 桶名
+        :param filename: 全路径文件名
+        :return:
+            (data, code, msg)
+            data: 指示请求成功时字典类型的数据，失败时为None
+            code: 请求返回的状态码或None
+            msg: 结果描述字符串
+        '''
+        return ApiCore().get_metadata(bucket_name=bucket_name, path=filename)
+
+
 

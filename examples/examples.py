@@ -7,8 +7,8 @@ import pyharbor
 pyharbor.set_global_settings({
     'SCHEME': 'http',   # 或'https', 默认'https'
     # 'DOMAIN_NAME': '10.0.86.213:8000', # 默认 'obs.casearth.cn'
-    'ACCESS_KEY': '3b03b89e44a411e98dfcc8000a00c8d4',
-    'SECRET_KEY': 'eeef1cb1f6839c071df44507243e957f1aa548a6',
+    'ACCESS_KEY': '0a4898b83a6911e9a040c8000a00c8d',
+    'SECRET_KEY': '5e3c1affe3900146b2795283c9a4110e925b0ee',
     })
 
 
@@ -44,10 +44,10 @@ else:
     print('设置失败：' + msg)
 
 
-# 获取一个对象元数据
-# data, code, msg = client.bucket('www').dir('testdir').get_obj_info('examples.py')
+# 获取一个对象或目录元数据
+# data, code, msg = client.bucket('www').dir('testdir').get_metadata('examples.py')
 # 或者
-data, code, msg = client.get_obj_info(bucket_name='www', obj_name='testdir/examples.py')
+data, code, msg = client.get_metadata(bucket_name='www', filename='testdir/examples.py')
 if data:
     print(data)
 else:

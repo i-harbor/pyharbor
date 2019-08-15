@@ -426,49 +426,6 @@ class ApiCore():
         obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=dir_path, obj_name=obj_name)
         return self.delete_obj_by_url(obj_url=obj_url)
 
-    def get_obj_info_by_url(self, obj_url):
-        '''
-        获取一个对象的元数据
-
-        :param obj_url: 对象url
-        :return:
-            (data, code, msg)
-            data: 指示请求成功时字典类型的数据，失败时为None
-            code: 请求返回的状态码或None
-            msg: 结果描述字符串
-        '''
-        try:
-            r = request.get(url=obj_url, params={'info': True})
-        except Exception as e:
-            return (None, None, str(e))
-
-        if r.status_code == 200:
-            try:
-                data = r.json()
-            except ValueError as e:
-                return (None, None, '获取无效的json数据：' + str(e))
-
-            return (data, 200, "Get object's metedata successful.")
-
-        msg = get_response_msg(r)
-        return (False, r.status_code, msg)
-
-    def get_obj_info(self, bucket_name, dir_path, obj_name):
-        '''
-        获取一个对象的元数据
-
-        :param bucket_name: 存储桶名称
-        :param dir_path: 目录路径
-        :param obj_name: 对象名称
-        :return:
-            (data, code, msg)
-            data: 指示请求成功时字典类型的数据，失败时为None
-            code: 请求返回的状态码或None
-            msg: 结果描述字符串
-        '''
-        obj_url = self._url_builder.build_obj_url(bucket_name=bucket_name, path=dir_path, obj_name=obj_name)
-        return self.get_obj_info_by_url(obj_url=obj_url)
-
     def get_metadata(self, bucket_name, path):
         '''
         获取元数据
